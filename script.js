@@ -10,48 +10,60 @@ const inputDistance = document.querySelector('.form__input--distance');
 const inputDuration = document.querySelector('.form__input--duration');
 const inputCadence = document.querySelector('.form__input--cadence');
 const inputElevation = document.querySelector('.form__input--elevation');
-class Workout{
-  date=new Date();
-  id=(Date.now()+''.slice(-10));
 
-  constructor(coords,distance,duration){
-    this.coords=coords;
-    this.distance=distance;
-    this.duration=duration;
+class Workout {
+  date = new Date();
+  id = Date.now().toString().slice(-10); // ✅ Sửa lỗi tạo ID
+
+  constructor(coords, distance, duration) {
+    this.coords = coords;
+    this.distance = distance;
+    this.duration = duration;
   }
 }
-class Running extends Workout{
-  constructor(coords,distance,duration,cadence){
-    super(coords,distance,duration);
-    this.cadence=cadence;
+
+class Running extends Workout {
+  type = 'running';
+
+  constructor(coords, distance, duration, cadence) {
+    super(coords, distance, duration);
+    this.cadence = cadence;
     this.calcPace();
   }
-  calcPace(){
-    this.pace=this.duration/this.distance;
+
+  calcPace() {
+    this.pace = this.duration / this.distance;
     return this.pace;
   }
 }
-class Cycling extends Workout{
-  constructor(coords,distance,duration,elevationGain){
-    super(coords,distance,duration);
-    this.elevationGain=elevationGain;
+
+class Cycling extends Workout {
+  type = 'cycling';
+
+  constructor(coords, distance, duration, elevationGain) {
+    super(coords, distance, duration);
+    this.elevationGain = elevationGain;
     this.calcSpeed();
   }
-  calcSpeed()
-  {
-    this.speed=this.distance/this.duration;
+
+  calcSpeed() {
+    this.speed = this.distance / this.duration;
+    return this.speed;
   }
 }
-/////////////////////////////////////////
-// APPLICATION ARCHITECTURE/////////////
+
+// APPLICATION ARCHITECTURE
 class App {
   #map;
   #mapEvent;
+  #workouts = [];
+
   constructor() {
     this._getPosition();
     form.addEventListener('submit', this._newWorkout.bind(this));
     inputType.addEventListener('change', this._toggleElevationField);
   }
+
   _getPosition() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -64,6 +76,7 @@ class App {
       alert('Geolocation is not supported by this browser.');
     }
   }
+
   _loadMap(position) {
     const latitude = position.coords.latitude;
     const longitude = position.coords.longitude;
@@ -78,26 +91,66 @@ class App {
 
     this.#map.on('click', this._showForm.bind(this));
   }
+
   _showForm(mapE) {
     this.#mapEvent = mapE;
     form.classList.remove('hidden');
     inputDistance.focus();
   }
+
   _toggleElevationField() {
     inputElevation.closest('.form__row').classList.toggle('form__row--hidden');
     inputCadence.closest('.form__row').classList.toggle('form__row--hidden');
   }
+
   _newWorkout(e) {
     e.preventDefault();
+
+    const validInputs = (...inputs) => inputs.every(inp => Number.isFinite(inp));
+    const allPositive = (...inputs) => inputs.every(inp => inp > 0);
+
+    // Get data from form
+    const distance = +inputDistance.value;
+    const duration = +inputDuration.value;
+    const type = inputType.value;
+    const { lat, lng } = this.#mapEvent.latlng;
+    let workout;
+
+    // If running => create running object
+    if (type === "running") {
+      const cadence = +inputCadence.value;
+      if (!validInputs(distance, duration, cadence) || !allPositive(distance, duration, cadence)) {
+        return alert("Inputs have to be positive numbers");
+      }
+      workout = new Running([lat, lng], distance, duration, cadence);
+    }
+
+    // If cycling => create cycling object
+    if (type === "cycling") { // ✅ Sửa lỗi kiểm tra type
+      const elevation = +inputElevation.value;
+      if (!validInputs(distance, duration, elevation) || !allPositive(distance, duration)) {
+        return alert("Inputs have to be positive numbers");
+      }
+      workout = new Cycling([lat, lng], distance, duration, elevation);
+    }
+
+    // Add new object to workout array
+    this.#workouts.push(workout);
+    console.log(workout);
+
+    // Render workout on map as marker
+    this._renderWorkoutMarker(workout); // ✅ Sửa lỗi gọi hàm
+
     // Clear input fields
     inputDistance.value =
       inputCadence.value =
       inputDuration.value =
       inputElevation.value =
         '';
-    //Display marker
-    const { lat, lng } = this.#mapEvent.latlng;
-    L.marker([lat, lng])
+  }
+
+  _renderWorkoutMarker(workout) {
+    L.marker(workout.coords)
       .addTo(this.#map)
       .bindPopup(
         L.popup({
@@ -105,11 +158,12 @@ class App {
           minWidth: 100,
           autoClose: false,
           closeOnClick: false,
-          className: 'running-popup',
+          className: `${workout.type}-popup`,
         })
       )
       .setPopupContent('Workout')
       .openPopup();
   }
 }
+
 const app = new App();
